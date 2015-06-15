@@ -7,19 +7,19 @@ import request from 'request';
 import sizeOf from 'image-size';
 import del from 'del';
 import imgur from 'imgur';
+import gm from 'gm';
 
-import {exec} from 'child_process';
 import fs from 'fs';
 import url from 'url';
 import crypto from 'crypto';
 
-let execAsync = Promise.promisify(exec);
 let delAsync = Promise.promisify(del);
 
 let app = express();
 
 Promise.promisifyAll(request);
 Promise.promisifyAll(fs);
+Promise.promisifyAll(gm.prototype);
 
 let targetDir = process.env.CAPTION_MAKER_TARGET_DIR || "target";
 let cache = new Map();
@@ -38,7 +38,7 @@ app.post('/', async function handlePost(req, res) {
     console.log("Fetching image");
     let {location, extension} = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
     console.log("Done. Adding text");
-    await (extension === 'gif' ? addTextGif(location, extension, req.body.top, req.body.bottom) : addText(location, extension, req.body.top, req.body.bottom));
+    await addText(location, extension, req.body.top, req.body.bottom);
     console.log("Done. Uploading to imgur");
     let json = await imgur.uploadFile(`${location}/output.${extension}`);
     console.log("Done. Imgur link", json.data.link, "Adding to cache");
@@ -65,7 +65,7 @@ async function fetchImage(uri, location) {
 
 function getTextSizes(width, height, topText, bottomText) {
     let maxTextWidth = width * 1.5;
-    let maxTextHeight = height * 0.1;
+    let maxTextHeight = height * 0.2;
     let maxLetterHeightPt = maxTextHeight * 1.25; // Px size is 80% of pt size
 
     let topMaxLetterWidthPx = maxTextWidth / topText.length;
@@ -79,27 +79,22 @@ function getTextSizes(width, height, topText, bottomText) {
     return {topPtSize: topPtSize, bottomPtSize: bottomPtSize};
 }
 
-function addText(location, extension, topText, bottomText) {
-    let {width, height} = sizeOf(`${location}/input.${extension}`);
-    let {topPtSize, bottomPtSize} = getTextSizes(width, height, topText, bottomText);
-    return execAsync(`convert -font "Impact" -fill white -stroke black \
-     -pointsize ${topPtSize} -gravity north -draw "text 0,20 '${topText}'" \
-     -pointsize ${bottomPtSize} -gravity south -draw "text 0,20 '${bottomText}'" \
-     ${location}/input.${extension} ${location}/output.${extension}`);
-}
-
-async function addTextGif(location, extension, topText, bottomText) {
+async function addText(location, extension, topText, bottomText) {
     let {width, height} = sizeOf(`${location}/input.${extension}`);
     let {topPtSize, bottomPtSize} = getTextSizes(width, height, topText, bottomText);
     await fs.mkdirAsync(`${location}/images`);
-    let [stdout,] = await execAsync(`identify -verbose ${location}/input.${extension} | grep -i delay`);
-    let animationDelay = stdout.split('\n')[0].replace(/.+Delay: /, "");
-    await execAsync(`convert -coalesce ${location}/input.${extension} ${location}/images/input_%06d.${extension}`);
-    await execAsync(`mogrify -font "Impact" -fill white -stroke black \
-                     -pointsize ${topPtSize} -gravity north -draw "text 0,20 '${topText}'" \
-                     -pointsize ${bottomPtSize} -gravity south -draw "text 0,20 '${bottomText}'" \
-                     ${location}/images/*`);
-    return execAsync(`convert -delay ${animationDelay} -loop 0 ${location}/images/input_* ${location}/output.${extension}`);
+    await gm(`${location}/input.${extension}`)
+        .coalesce()
+        .writeAsync(`${location}/output.${extension}`);
+    return gm(`${location}/output.${extension}`)
+        .fill("white")
+        .stroke("black")
+        .font("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf")
+        .pointSize(topPtSize)
+        .drawText(0, (topPtSize * .8) + 20, topText.toUpperCase(), "North") // topPtSize * .8 == Letter height in px
+        .pointSize(bottomPtSize)
+        .drawText(0, 20, bottomText.toUpperCase(), "South")
+        .writeAsync(`${location}/output.${extension}`);
 }
 
 function sha1(string) {
