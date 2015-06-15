@@ -29,14 +29,19 @@ app.use(urlencoded({extended: false}));
 app.post('/', async function handlePost(req, res) {
     console.log(req.body);
     let sha = sha1(JSON.stringify(req.body));
-    console.log(sha);
+    console.log("SHA1:", sha);
     if (cache.get(sha)) {
+        console.log("Getting from cache:", cache.get(sha));
         res.end(cache.get(sha));
         return;
     }
+    console.log("Fetching image");
     let {location, extension} = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
+    console.log("Done. Adding text");
     await (extension === 'gif' ? addTextGif(location, extension, req.body.top, req.body.bottom) : addText(location, extension, req.body.top, req.body.bottom));
+    console.log("Done. Uploading to imgur");
     let json = await imgur.uploadFile(`${location}/output.${extension}`);
+    console.log("Done. Imgur link", json.data.link, "Adding to cache");
     cache.set(sha, json.data.link);
     res.end(json.data.link);
 });
@@ -96,10 +101,14 @@ async function addTextGif(location, extension, topText, bottomText) {
                      ${location}/images/*`);
     return execAsync(`convert -delay ${animationDelay} -loop 0 ${location}/images/input_* ${location}/output.${extension}`);
 }
-let server = app.listen(process.env.CAPTION_MAKER_PORT || 8080, () => console.log("Server running!"));
 
 function sha1(string) {
     let hash = crypto.createHash('sha1');
     hash.update(string);
     return hash.digest('hex');
 }
+
+let server = app.listen(process.env.CAPTION_MAKER_PORT || 8080, () => {
+    del(`${targetDir}/*`);
+    console.log("Server running!")
+});
