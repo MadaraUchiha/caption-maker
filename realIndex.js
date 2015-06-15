@@ -2,7 +2,7 @@
 
 import Promise from 'bluebird';
 import express from 'express';
-import {json} from 'body-parser';
+import {json, urlencoded} from 'body-parser';
 import request from 'request';
 import sizeOf from 'image-size';
 import del from 'del';
@@ -21,7 +21,9 @@ Promise.promisifyAll(request);
 Promise.promisifyAll(fs);
 
 app.use(json());
+app.use(urlencoded({extended: false}));
 app.post('/', Promise.coroutine(function*(req, res) {
+    console.log(req.body);
     let {location, extension} = yield fetchImage(req.body.uri);
     yield extension === 'gif' ? addTextGif(location, extension, req.body.top, req.body.bottom) : addText(location, extension, req.body.top, req.body.bottom);
     let json = yield imgur.uploadFile(`${location}/output.${extension}`);
