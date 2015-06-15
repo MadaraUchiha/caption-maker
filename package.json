@@ -1,0 +1,22 @@
+{
+  "name": "caption-maker",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Madara Uchiha",
+  "license": "MIT",
+  "dependencies": {
+    "babel": "^5.5.8",
+    "bluebird": "^2.9.30",
+    "body-parser": "^1.13.0",
+    "del": "^1.2.0",
+    "exec": "^0.2.0",
+    "express": "^4.12.4",
+    "image-size": "^0.3.5",
+    "imgur": "^0.1.5",
+    "request": "^2.57.0"
+  }
+}
