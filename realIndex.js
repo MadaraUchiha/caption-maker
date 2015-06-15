@@ -11,6 +11,7 @@ import imgur from 'imgur';
 import {exec} from 'child_process';
 import fs from 'fs';
 import url from 'url';
+import crypto from 'crypto';
 
 let execAsync = Promise.promisify(exec);
 let delAsync = Promise.promisify(del);
@@ -20,20 +21,31 @@ let app = express();
 Promise.promisifyAll(request);
 Promise.promisifyAll(fs);
 
+let targetDir = process.env.CAPTION_MAKER_TARGET_DIR || "target";
+let cache = new Map();
+
 app.use(json());
 app.use(urlencoded({extended: false}));
 app.post('/', async function handlePost(req, res) {
     console.log(req.body);
-    let {location, extension} = await fetchImage(req.body.uri);
+    let sha = sha1(JSON.stringify(req.body));
+    console.log(sha);
+    if (cache.get(sha)) {
+        res.end(cache.get(sha));
+        return;
+    }
+    let {location, extension} = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
     await (extension === 'gif' ? addTextGif(location, extension, req.body.top, req.body.bottom) : addText(location, extension, req.body.top, req.body.bottom));
     let json = await imgur.uploadFile(`${location}/output.${extension}`);
+    cache.set(sha, json.data.link);
     res.end(json.data.link);
 });
 
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
 
-async function fetchImage(uri, location = "./target") {
-    await delAsync(`${location}/*`);
+async function fetchImage(uri, location) {
+    console.log(location);
+    await fs.mkdirAsync(`${location}`);
     let path = url.parse(uri).path;
     let parts = path.split('.');
     let extension = parts[parts.length - 1];
@@ -86,4 +98,8 @@ async function addTextGif(location, extension, topText, bottomText) {
 }
 let server = app.listen(process.env.CAPTION_MAKER_PORT || 8080, () => console.log("Server running!"));
 
-//fetchImage("https://i.imgur.com/zekdGh4.png", ".").then(console.log);
+function sha1(string) {
+    let hash = crypto.createHash('sha1');
+    hash.update(string);
+    return hash.digest('hex');
+}
