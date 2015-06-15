@@ -84,6 +84,6 @@ async function addTextGif(location, extension, topText, bottomText) {
                      ${location}/images/*`);
     return execAsync(`convert -delay ${animationDelay} -loop 0 ${location}/images/input_* ${location}/output.${extension}`);
 }
-let server = app.listen(8080, () => console.log("Server running!"));
+let server = app.listen(process.env.CAPTION_MAKER_PORT || 8080, () => console.log("Server running!"));
 
 //fetchImage("https://i.imgur.com/zekdGh4.png", ".").then(console.log);
