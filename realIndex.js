@@ -1,5 +1,3 @@
-// Created by madara all rights reserved.
-
 import Promise from 'bluebird';
 import express from 'express';
 import {json, urlencoded} from 'body-parser';
