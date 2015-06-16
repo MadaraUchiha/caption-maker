@@ -34,11 +34,11 @@ app.post('/', async function handlePost(req, res) {
         return;
     }
     console.log("Fetching image");
-    let {location, extension} = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
+    let location = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
     console.log("Done. Adding text");
-    await addText(location, extension, req.body.top, req.body.bottom);
+    await addText(location, req.body.top, req.body.bottom);
     console.log("Done. Uploading to imgur");
-    let json = await imgur.uploadFile(`${location}/output.${extension}`);
+    let json = await imgur.uploadFile(`${location}/output`);
     console.log("Done. Imgur link", json.data.link, "Adding to cache");
     cache.set(sha, json.data.link);
     res.end(json.data.link);
@@ -47,18 +47,15 @@ app.post('/', async function handlePost(req, res) {
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
 
 async function fetchImage(uri, location) {
-    console.log(location);
-    await fs.mkdirAsync(`${location}`);
-    let path = url.parse(uri).path;
-    let parts = path.split('.');
-    let extension = parts[parts.length - 1];
+    console.log("Saving to", location);
+    await fs.mkdirAsync(location);
     await new Promise((resolve, reject) => {
         request(uri)
-            .pipe(fs.createWriteStream(`${location}/input.${extension}`))
+            .pipe(fs.createWriteStream(`${location}/input`))
             .on('close', resolve)
             .on('error', reject);
     });
-    return {location, extension};
+    return location;
 }
 
 function getTextSizes(width, height, topText, bottomText) {
@@ -77,14 +74,14 @@ function getTextSizes(width, height, topText, bottomText) {
     return {topPtSize: topPtSize, bottomPtSize: bottomPtSize};
 }
 
-async function addText(location, extension, topText, bottomText) {
-    let {width, height} = sizeOf(`${location}/input.${extension}`);
+async function addText(location, topText, bottomText) {
+    let {width, height} = sizeOf(`${location}/input`);
     let {topPtSize, bottomPtSize} = getTextSizes(width, height, topText, bottomText);
     await fs.mkdirAsync(`${location}/images`);
-    await gm(`${location}/input.${extension}`)
+    await gm(`${location}/input`)
         .coalesce()
-        .writeAsync(`${location}/output.${extension}`);
-    return gm(`${location}/output.${extension}`)
+        .writeAsync(`${location}/output`);
+    return gm(`${location}/output`)
         .fill("white")
         .stroke("black")
         .font("/usr/share/fonts/truetype/msttcorefonts/Impact.ttf")
@@ -92,7 +89,7 @@ async function addText(location, extension, topText, bottomText) {
         .drawText(0, (topPtSize * .8) + 20, topText.toUpperCase(), "North") // topPtSize * .8 == Letter height in px
         .pointSize(bottomPtSize)
         .drawText(0, 20, bottomText.toUpperCase(), "South")
-        .writeAsync(`${location}/output.${extension}`);
+        .writeAsync(`${location}/output`);
 }
 
 function sha1(string) {
