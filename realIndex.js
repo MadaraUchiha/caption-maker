@@ -11,6 +11,8 @@ import fs from 'fs';
 import url from 'url';
 import crypto from 'crypto';
 
+import {Cache} from './cache';
+
 let delAsync = Promise.promisify(del);
 
 let app = express();
@@ -20,12 +22,16 @@ Promise.promisifyAll(fs);
 Promise.promisifyAll(gm.prototype);
 
 let targetDir = process.env.CAPTION_MAKER_TARGET_DIR || "target";
-let cache = new Map();
+let cache = Cache.fromCsvFile('cache.csv');
 
 app.use(json());
 app.use(urlencoded({extended: false}));
 app.post('/', async function handlePost(req, res) {
     console.log(req.body);
+
+    req.body.top = req.body.top.toUpperCase();
+    req.body.bottom = req.body.bottom.toUpperCase();
+
     let sha = sha1(JSON.stringify(req.body));
     console.log("SHA1:", sha);
     if (cache.get(sha)) {
@@ -41,6 +47,8 @@ app.post('/', async function handlePost(req, res) {
     let json = await imgur.uploadFile(`${location}/output`);
     console.log("Done. Imgur link", json.data.link, "Adding to cache");
     cache.set(sha, json.data.link);
+    console.log("Removing from filesystem");
+    await delAsync(location);
     res.end(json.data.link);
 });
 
