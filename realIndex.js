@@ -28,7 +28,7 @@ let cache = Cache.fromCsvFile('cache.csv');
 
 app.use(json());
 app.use(urlencoded({extended: false}));
-app.post('/', async function handlePost(req, res, next) {
+app.post('/', function handlePost(req, res, next) {
     try {
         console.log(req.body);
 
@@ -42,32 +42,41 @@ app.post('/', async function handlePost(req, res, next) {
             res.end(cache.get(sha));
             return;
         }
+        req.sha = sha;
 
-        let location = `./${targetDir}/${sha}`;
-        req.location = location;
+        req.location = `./${targetDir}/${sha}`;
+        req.linkPromise = main(req).catch(next);
 
-        console.log("Fetching image");
-        await fetchImage(req.body.uri, location);
-        console.log("Done. Adding text");
-        await addText(location, req.body.top, req.body.bottom);
-        console.log("Done. Uploading to imgur");
-        let json = await imgur.uploadFile(`${location}/output`);
-        console.log("Done. Imgur link", json.data.link, "Adding to cache");
-        cache.set(sha, json.data.link);
-        console.log("Removing from filesystem");
-        await delAsync(location);
-        res.end(json.data.link);
+        if (req.body.websocket === undefined) {
+            req.linkPromise.then(res.end.bind(res));
+        }
+        else {
+            console.log('Coming soon!');
+        }
     } catch (err) {
         next(err);
     }
 });
 
+async function main(req) {
+    console.log("Fetching image");
+    await fetchImage(req.body.uri, req.location);
+    console.log("Done. Adding text");
+    await addText(req.location, req.body.top, req.body.bottom);
+    console.log("Done. Uploading to imgur");
+    let json = await imgur.uploadFile(`${req.location}/output`);
+    console.log("Done. Imgur link", json.data.link, "Adding to cache");
+    cache.set(req.sha, json.data.link);
+    console.log("Removing from filesystem");
+    await delAsync(req.location);
+    return json.data.link;
+}
+
 app.use(function(error, req, res, next) {
     console.error(error.stack);
     console.error(`Removing ${req.location}`);
-    console.log(req.location);
-    let endRequest = () => res.status(500).end(error.message);
-    delAsync(req.location).then(endRequest, endRequest);
+    res.status(500).end(error.message);
+    //delAsync(req.location);
 });
 
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
@@ -75,8 +84,11 @@ app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).th
 async function fetchImage(uri, location) {
     console.log("Saving to", location);
     await fs.mkdirAsync(location);
-    let [,body] = await request.getAsync(uri);
-    return fs.writeFileAsync(`${location}/input`, body);
+    return new Promise((resolve, reject) => {
+        let stream = request(uri).pipe(fs.createWriteStream(`${location}/input`));
+        stream.on('error', reject);
+        stream.on('close', resolve);
+    })
 }
 
 function getTextSizes(width, height, topText, bottomText) {
