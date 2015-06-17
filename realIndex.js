@@ -76,7 +76,7 @@ app.use(function(error, req, res, next) {
     console.error(error.stack);
     console.error(`Removing ${req.location}`);
     res.status(500).end(error.message);
-    //delAsync(req.location);
+    delAsync(req.location);
 });
 
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
