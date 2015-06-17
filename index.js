@@ -1,4 +1,4 @@
 'use strict';
 
-require("babel/register")({ optional: ["es7.asyncFunctions"] });
+require("babel/register")({ optional: ["bluebirdCoroutines"] });
 require('./realIndex.js');
