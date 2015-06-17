@@ -42,8 +42,12 @@ app.post('/', async function handlePost(req, res, next) {
             res.end(cache.get(sha));
             return;
         }
+
+        let location = `./${targetDir}/${sha}`;
+        req.location = location;
+
         console.log("Fetching image");
-        let location = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
+        await fetchImage(req.body.uri, location);
         console.log("Done. Adding text");
         await addText(location, req.body.top, req.body.bottom);
         console.log("Done. Uploading to imgur");
@@ -58,7 +62,13 @@ app.post('/', async function handlePost(req, res, next) {
     }
 });
 
-app.use((error, req, res, next) => res.status(500).end(error.message));
+app.use(function(error, req, res, next) {
+    console.error(error.stack);
+    console.error(`Removing ${req.location}`);
+    console.log(req.location);
+    let endRequest = () => res.status(500).end(error.message);
+    delAsync(req.location).then(endRequest, endRequest);
+});
 
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
 
@@ -66,8 +76,7 @@ async function fetchImage(uri, location) {
     console.log("Saving to", location);
     await fs.mkdirAsync(location);
     let [,body] = await request.getAsync(uri);
-    await fs.writeFileAsync(`${location}/input`, body);
-    return location;
+    return fs.writeFileAsync(`${location}/input`, body);
 }
 
 function getTextSizes(width, height, topText, bottomText) {
