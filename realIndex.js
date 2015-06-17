@@ -13,6 +13,8 @@ import crypto from 'crypto';
 
 import {Cache} from './cache';
 
+Promise.longStackTraces();
+
 let delAsync = Promise.promisify(del);
 
 let app = express();
@@ -26,43 +28,45 @@ let cache = Cache.fromCsvFile('cache.csv');
 
 app.use(json());
 app.use(urlencoded({extended: false}));
-app.post('/', async function handlePost(req, res) {
-    console.log(req.body);
+app.post('/', async function handlePost(req, res, next) {
+    try {
+        console.log(req.body);
 
-    req.body.top = req.body.top.toUpperCase();
-    req.body.bottom = req.body.bottom.toUpperCase();
+        req.body.top = req.body.top.toUpperCase();
+        req.body.bottom = req.body.bottom.toUpperCase();
 
-    let sha = sha1(JSON.stringify(req.body));
-    console.log("SHA1:", sha);
-    if (cache.get(sha)) {
-        console.log("Getting from cache:", cache.get(sha));
-        res.end(cache.get(sha));
-        return;
+        let sha = sha1(JSON.stringify(req.body));
+        console.log("SHA1:", sha);
+        if (cache.get(sha)) {
+            console.log("Getting from cache:", cache.get(sha));
+            res.end(cache.get(sha));
+            return;
+        }
+        console.log("Fetching image");
+        let location = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
+        console.log("Done. Adding text");
+        await addText(location, req.body.top, req.body.bottom);
+        console.log("Done. Uploading to imgur");
+        let json = await imgur.uploadFile(`${location}/output`);
+        console.log("Done. Imgur link", json.data.link, "Adding to cache");
+        cache.set(sha, json.data.link);
+        console.log("Removing from filesystem");
+        await delAsync(location);
+        res.end(json.data.link);
+    } catch (err) {
+        next(err);
     }
-    console.log("Fetching image");
-    let location = await fetchImage(req.body.uri, `./${targetDir}/${sha}`);
-    console.log("Done. Adding text");
-    await addText(location, req.body.top, req.body.bottom);
-    console.log("Done. Uploading to imgur");
-    let json = await imgur.uploadFile(`${location}/output`);
-    console.log("Done. Imgur link", json.data.link, "Adding to cache");
-    cache.set(sha, json.data.link);
-    console.log("Removing from filesystem");
-    await delAsync(location);
-    res.end(json.data.link);
 });
+
+app.use((error, req, res, next) => res.status(500).end(error.message));
 
 app.get('/', (req, res) => fs.readFileAsync('index.html', {encoding: 'utf8'}).then(data => res.end(data)));
 
 async function fetchImage(uri, location) {
     console.log("Saving to", location);
     await fs.mkdirAsync(location);
-    await new Promise((resolve, reject) => {
-        request(uri)
-            .pipe(fs.createWriteStream(`${location}/input`))
-            .on('close', resolve)
-            .on('error', reject);
-    });
+    let [,body] = await request.getAsync(uri);
+    await fs.writeFileAsync(`${location}/input`, body);
     return location;
 }
 
